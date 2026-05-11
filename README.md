@@ -204,6 +204,7 @@ network-monitoring-v2/
 │   └── winlogbeat.yml.example
 ├── scripts/
 │   └── bootstrap-opensearch.sh
+│   └── reindex-opensearch.sh
 ├── logstash/
 │   ├── Dockerfile
 │   ├── config/logstash.yml
@@ -250,3 +251,14 @@ network-monitoring-v2/
 - Templates also apply explicit mappings for IP fields, ports, event action/severity, observer vendor/product, and geo locations.
 - Result: lower disk usage, better ingest throughput, and fewer wasted shards on a single-node deployment.
 - Note: these settings apply to newly created indices. Existing indices keep their current settings unless reindexed.
+
+To apply the new settings and mappings to older indices:
+
+```bash
+sh scripts/reindex-opensearch.sh syslog-2026.05.10
+sh scripts/reindex-opensearch.sh netflow-2026.05.10 netflow-2026.05.10-tuned
+```
+
+- The helper creates a new target index so the existing index stays untouched.
+- Use a target name that still matches the same prefix, such as `syslog-*` or `netflow-*`, so the template is applied.
+- After validation, repoint dashboards or aliases to the new index, then delete the old one if you no longer need it.
