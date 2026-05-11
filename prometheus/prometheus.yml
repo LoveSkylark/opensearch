@@ -1,0 +1,76 @@
+global:
+  scrape_interval: 60s
+  evaluation_interval: 60s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+
+  # -----------------------------------------------------------
+  # LibreNMS metrics (external) via Pushgateway
+  # LibreNMS pushes SNMP poll data here every 5 minutes.
+  # honor_labels preserves the device/instance labels LibreNMS sets.
+  # scrape_interval matches LibreNMS default poll cycle.
+  # -----------------------------------------------------------
+  - job_name: 'librenms-pushgateway'
+    honor_labels: true
+    scrape_interval: 300s
+    static_configs:
+      - targets: ['127.0.0.1:9091']
+
+  # -----------------------------------------------------------
+  # SNMP Exporter — direct SNMP polling
+  # Add your network device IPs to the targets lists below.
+  # Requires SNMP read access (community string or SNMPv3 creds).
+  # -----------------------------------------------------------
+
+  # Interface stats: bandwidth, errors, drops per port
+  - job_name: 'snmp-interfaces'
+    static_configs:
+      - targets:
+        - 192.168.1.1    # Replace with your device IPs
+        - 192.168.1.2
+        - 192.168.1.10
+    metrics_path: /snmp
+    params:
+      module: [if_mib]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: 127.0.0.1:9116
+
+  # System info: uptime, description, name
+  - job_name: 'snmp-system'
+    static_configs:
+      - targets:
+        - 192.168.1.1
+        - 192.168.1.2
+        - 192.168.1.10
+    metrics_path: /snmp
+    params:
+      module: [system]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: 127.0.0.1:9116
+
+  # Self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['127.0.0.1:9090']
+
+  - job_name: 'snmp-exporter'
+    static_configs:
+      - targets: ['127.0.0.1:9116']
+
+  - job_name: 'pushgateway'
+    honor_labels: true
+    static_configs:
+      - targets: ['127.0.0.1:9091']

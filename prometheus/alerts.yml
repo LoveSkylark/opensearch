@@ -1,0 +1,29 @@
+groups:
+  - name: stack-availability
+    rules:
+      - alert: PrometheusTargetDown
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus target down"
+          description: "Target {{ $labels.job }} on {{ $labels.instance }} has been down for more than 5 minutes."
+
+      - alert: SNMPExporterDown
+        expr: up{job="snmp-exporter"} == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SNMP Exporter is down"
+          description: "Prometheus cannot scrape SNMP exporter at {{ $labels.instance }}."
+
+      - alert: PushgatewayDown
+        expr: up{job="pushgateway"} == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Pushgateway is down"
+          description: "Prometheus cannot scrape Pushgateway at {{ $labels.instance }}."
