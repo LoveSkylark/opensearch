@@ -60,6 +60,34 @@ via the Prometheus Pushgateway only.
 
 ---
 
+## Services and Ports
+
+| Service                   | Port(s)            | Protocol      | Purpose                        |
+|---------------------------|--------------------|---------------|--------------------------------|
+| OpenSearch                | 9200               | HTTPS         | Log/flow/trap storage API      |
+| OpenSearch Dashboards     | 5601               | HTTP          | Web UI for log search          |
+| Logstash (NetFlow/IPFIX)  | 2055               | UDP           | NetFlow v5/v9/IPFIX ingest     |
+| Logstash (sFlow)          | 6343               | UDP           | sFlow telemetry ingest         |
+| Logstash (SNMP Traps)     | 1062               | UDP           | SNMP trap ingest               |
+| Logstash (Beats/Endpoint) | 5044               | TCP           | Winlogbeat/Filebeat ingest     |
+| Logstash (Syslog)         | 5140/5141          | UDP/TCP       | Syslog ingest (via NAT from 514)|
+| Fluent Bit (Syslog)       | 5140/5141          | UDP/TCP       | Alternative syslog path       |
+| SNMP Exporter             | 9116               | HTTP          | Prometheus SNMP metrics        |
+| Prometheus Pushgateway    | 9091               | HTTP          | Metrics push ingress (LibreNMS)|
+| Prometheus                | 9090               | HTTP          | Metrics storage & query engine |
+| Grafana (optional)        | 3000               | HTTP          | Alternative dashboard UI       |
+
+**Device Configuration Quick Reference:**
+```
+NetFlow/IPFIX    → host:2055 (UDP)
+sFlow            → host:6343 (UDP)
+Syslog           → host:514 (UDP/TCP, NATed to 5140/5141)
+SNMP Traps       → host:162 (UDP, NATed to 1062)
+Beats agents     → host:5044 (TCP)
+```
+
+---
+
 ## Quick Start
 
 ```bash
