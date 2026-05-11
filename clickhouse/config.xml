@@ -1,0 +1,22 @@
+<yandex>
+    <!-- Basic ClickHouse configuration for NetFlow analytics -->
+    
+    <!-- Allow connections from any host (restrict in production) -->
+    <listen_host>::</listen_host>
+    
+    <!-- Max memory per query (4GB) -->
+    <max_memory_usage>4000000000</max_memory_usage>
+    
+    <!-- Temporary data path for large queries -->
+    <tmp_path>/var/lib/clickhouse/tmp/</tmp_path>
+    
+    <!-- User configuration (default user) -->
+    <users>
+        <default>
+            <!-- Default password set via environment -->
+            <access_management>0</access_management>
+            <named_collection_control>0</named_collection_control>
+            <show_named_collections>0</show_named_collections>
+        </default>
+    </users>
+</yandex>

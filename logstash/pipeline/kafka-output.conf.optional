@@ -1,0 +1,14 @@
+# Optional Kafka output pipeline for netflow
+# Enable by uncommenting the kafka output plugin in logstash/pipeline/netflow.conf
+# or adding this as a separate pipeline for event streaming
+
+output {
+  kafka {
+    bootstrap_servers => "kafka:29092"
+    topic_id => "netflow"
+    codec => "json"
+    compression_type => "snappy"
+    key_serializer => "org.apache.kafka.common.serialization.StringSerializer"
+    value_serializer => "org.apache.kafka.common.serialization.ByteArraySerializer"
+  }
+}
