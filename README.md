@@ -239,5 +239,6 @@ network-monitoring-v2/
 
 - New OpenSearch indices now get single-node templates for `netflow-*`, `syslog-*`, `snmp-traps-*`, and `endpoint-*`.
 - Templates set `number_of_shards=1`, `number_of_replicas=0`, `refresh_interval=30s`, and `codec=best_compression`.
+- Templates also apply explicit mappings for IP fields, ports, event action/severity, observer vendor/product, and geo locations.
 - Result: lower disk usage, better ingest throughput, and fewer wasted shards on a single-node deployment.
 - Note: these settings apply to newly created indices. Existing indices keep their current settings unless reindexed.
