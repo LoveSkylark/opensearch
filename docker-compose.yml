@@ -13,7 +13,6 @@
 #    SNMP Exporter             Direct SNMP polling → Prometheus
 #    Prometheus Pushgateway    Receives metrics from LibreNMS (external)
 #    Prometheus                Metrics store — scrapes Pushgateway + SNMP Exporter
-#
 #  Collector → Storage map:
 #    Logstash  (NetFlow, syslog, traps)  → OpenSearch
 #    SNMP Exporter                       → Prometheus
@@ -111,6 +110,7 @@ services:
     volumes:
       - ./logstash/pipeline:/usr/share/logstash/pipeline
       - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml
+      - ./logstash/enrichment:/usr/share/logstash/enrichment:ro
     environment:
       LS_JAVA_OPTS: ${LS_JAVA_OPTS:-'-Xms2g -Xmx2g'}
       OPENSEARCH_HOST: ${OPENSEARCH_HOST:-127.0.0.1}
@@ -240,27 +240,6 @@ services:
       timeout: 10s
       retries: 10
       start_period: 20s
-
-  # -----------------------------------------------------------
-  # REDIS — In-memory cache for enrichment
-  # Port: 6379
-  # Logstash uses this to enrich events with IP reputation, etc.
-  # -----------------------------------------------------------
-  redis:
-    image: redis:7-alpine
-    container_name: redis
-    restart: unless-stopped
-    env_file:
-      - .env
-    ports:
-      - "6379:6379"
-    command: redis-server --requirepass ${REDIS_PASSWORD:-RedisChangeMe!}
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 10s
 
   # -----------------------------------------------------------
   # OPENSEARCH BOOTSTRAP — Applies retention policies/templates

@@ -30,7 +30,7 @@ via the Prometheus Pushgateway only.
 │                                             │          │
 │                                     Pushgateway ◄─────┘
 │                                             │
-│                               Redis (enrichment cache)
+│                               Redis (enrichment — translate lookup files)
 │                                             │
 │          ┌─────────────────────────────────┴──────────┐
 │          │                                            │
@@ -80,7 +80,6 @@ via the Prometheus Pushgateway only.
 | Prometheus Pushgateway    | 9091               | HTTP          | Metrics push ingress (LibreNMS)|
 | Prometheus                | 9090               | HTTP          | Metrics storage & query engine |
 | Grafana                   | 3000               | HTTP          | Alternative dashboard UI       |
-| Redis                     | 6379               | TCP           | IP/threat intel enrichment     |
 
 **Device Configuration Quick Reference:**
 ```
@@ -208,6 +207,9 @@ network-monitoring-v2/
 ├── logstash/
 │   ├── Dockerfile
 │   ├── config/logstash.yml
+│   ├── enrichment/
+│   │   ├── ip-categories.yml              Asset category lookup table
+│   │   └── ip-reputation.yml              IP reputation lookup table
 │   └── pipeline/
 │       ├── endpoints.conf             Win/Linux Beats → OpenSearch
 │       ├── netflow.conf               NetFlow/IPFIX/sFlow → OpenSearch
@@ -251,6 +253,20 @@ network-monitoring-v2/
 - Templates also apply explicit mappings for IP fields, ports, event action/severity, observer vendor/product, and geo locations.
 - Result: lower disk usage, better ingest throughput, and fewer wasted shards on a single-node deployment.
 - Note: these settings apply to newly created indices. Existing indices keep their current settings unless reindexed.
+
+## Enrichment
+
+Logstash enriches events using `translate` lookup files before writing to OpenSearch.
+No external service is required — files are mounted read-only into the Logstash container.
+
+| File | Purpose |
+|------|---------|
+| `logstash/enrichment/ip-reputation.yml` | Maps IPs to reputation tags: `known-good`, `dns-public`, `scanner`, `known-threat`, etc. |
+| `logstash/enrichment/ip-categories.yml` | Maps IPs to asset categories: `firewall`, `router`, `server`, `monitoring`, etc. |
+
+Both files are reloaded automatically every 5 minutes without restarting Logstash.
+Edit them with your own device IPs and threat intel entries.
+The fields `[source][reputation]`, `[source][category]`, `[destination][reputation]`, and `[destination][category]` will appear in all `syslog-*`, `netflow-*`, and `endpoint-*` indices.
 
 To apply the new settings and mappings to older indices:
 

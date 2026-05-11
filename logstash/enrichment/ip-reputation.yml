@@ -1,0 +1,47 @@
+# IP Reputation Lookup — used by Logstash translate filter
+#
+# Format:  "<IP>": "<reputation-tag>"
+#
+# Reputation tags used by this stack:
+#   known-good   : trusted internal or well-known external infrastructure
+#   cdn          : content delivery network
+#   dns-public   : public DNS resolvers
+#   ntp          : public NTP servers
+#   known-threat : IPs from threat intel feeds (update regularly)
+#   tor-exit     : known Tor exit nodes
+#   scanner      : known scanning infrastructure (Shodan, Censys, etc.)
+#
+# Logstash loads this file at startup and reloads on change
+# (requires logstash.yml: config.reload.automatic: true).
+#
+# Add your own entries below. For large threat feeds, consider splitting
+# into separate files and adding additional translate filter blocks.
+
+# --- Internal / trusted infrastructure (replace with your own) ---
+"10.0.0.1":       "known-good"
+"10.0.0.2":       "known-good"
+"192.168.1.1":    "known-good"
+"192.168.1.254":  "known-good"
+
+# --- Public DNS ---
+"8.8.8.8":        "dns-public"
+"8.8.4.4":        "dns-public"
+"1.1.1.1":        "dns-public"
+"1.0.0.1":        "dns-public"
+"9.9.9.9":        "dns-public"
+"208.67.222.222": "dns-public"
+"208.67.220.220": "dns-public"
+
+# --- Public NTP ---
+"129.6.15.28":    "ntp"
+"129.6.15.29":    "ntp"
+"132.163.97.1":   "ntp"
+
+# --- Known scanners / research infrastructure ---
+"71.6.135.131":   "scanner"
+"71.6.216.32":    "scanner"
+"80.82.77.139":   "scanner"
+
+# --- Known threat IPs (examples — replace with real threat intel) ---
+# "198.51.100.10":  "known-threat"
+# "203.0.113.42":   "known-threat"
