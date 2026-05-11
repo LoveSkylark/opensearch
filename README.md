@@ -24,24 +24,19 @@ via the Prometheus Pushgateway only.
 │    ├─ SNMP Traps   (UDP 162)  ───┼─► Logstash ──────┬──► OpenSearch
 │    ├─ Syslog       (UDP 514)  ───┼─► Fluent Bit ────┤    (storage)
 │    │                             │                   │
-│    └─ Beats (TCP 5044) ──────────┘                   └──► Kafka (optional)
-│                                                             │
-│  SNMP Poll         ──► SNMP Exporter ──► Prometheus        │
-│                                             │               │
-│                                     Pushgateway ◄──────────┘
+│    └─ Beats (TCP 5044) ──────────┘                   │
+│                                                       │
+│  SNMP Poll         ──► SNMP Exporter ──► Prometheus  │
+│                                             │          │
+│                                     Pushgateway ◄─────┘
 │                                             │
-│                                   Redis (optional)
-│                                 (enrichment cache)
+│                               Redis (enrichment cache)
 │                                             │
-│                                  ClickHouse (optional)
-│                                  (flow analytics)
-│                                             │
-│          ┌─────────────────────────────────┴─────────────────┐
-│          │                                                   │
-│   OpenSearch Dashboards ◄─────┐                             │
-│   (logs/flows/traps)          │                             │
-│                               └─ Grafana (optional)
-│   Prometheus UI                 (alternative UI)
+│          ┌─────────────────────────────────┴──────────┐
+│          │                                            │
+│   OpenSearch Dashboards ◄──┐                          │
+│   (logs/flows/traps)       │                          │
+│                            └─ Grafana (alternative UI)
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -86,11 +81,8 @@ via the Prometheus Pushgateway only.
 | SNMP Exporter             | 9116               | HTTP          | Prometheus SNMP metrics        |
 | Prometheus Pushgateway    | 9091               | HTTP          | Metrics push ingress (LibreNMS)|
 | Prometheus                | 9090               | HTTP          | Metrics storage & query engine |
-| Grafana (optional)        | 3000               | HTTP          | Alternative dashboard UI       |
-| Redis (optional)          | 6379               | TCP           | IP/threat intel enrichment     |
-| Zookeeper (with Kafka)    | 2181               | TCP           | Kafka coordination             |
-| Kafka (optional)          | 9092               | TCP           | Event stream buffering         |
-| ClickHouse (optional)     | 8123/9000          | HTTP/TCP      | Columnar flow analytics        |
+| Grafana                   | 3000               | HTTP          | Alternative dashboard UI       |
+| Redis                     | 6379               | TCP           | IP/threat intel enrichment     |
 
 **Device Configuration Quick Reference:**
 ```
@@ -173,28 +165,6 @@ shared fields (`event.action`, `event.severity`) for easier cross-vendor search.
 - Send both to Logstash on TCP `5044`
 - Events are indexed to `endpoint-*`
 
-## Optional Scaling Services
-
-All of these services are **disabled by default** and can be enabled in `.env` or `docker-compose.yml`.
-
-### Redis (In-Memory Cache)
-- **Use for:** IP reputation lookups, threat intelligence caching, enrichment acceleration
-- **Enable:** Uncomment Redis service in `docker-compose.yml`
-- **Performance gain:** Sub-millisecond enrichment lookups vs. 50-200ms disk/API lookups
-- **When needed:** Enriching 1000+ events/sec with external threat feeds
-
-### Kafka (Message Broker)
-- **Use for:** Decoupling collectors from storage, buffering during outages, real-time stream processing
-- **Enable:** Uncomment Kafka + Zookeeper in `docker-compose.yml`; optional Logstash output in pipelines
-- **When needed:** >100k events/sec sustained load, need guaranteed delivery, want stream-based alerting
-- **Topics created automatically:** `netflow`, `syslog`, `endpoints`, `snmp-traps`
-
-### ClickHouse (Columnar Analytics DB)
-- **Use for:** NetFlow/sFlow analytics, long-term flow storage, fast aggregations (top talkers, bandwidth trends)
-- **Enable:** Uncomment ClickHouse in `docker-compose.yml`; run schema setup in `clickhouse/netflow_schema.sql`
-- **When needed:** Need year-long flow retention, doing bandwidth/protocol/app analytics, want <1 second query times
-- **Cost savings:** 50-80% compression vs. raw storage, much cheaper than OpenSearch for time-series data
-
 ---
 
 ## OpenSearch Dashboards First-Time Setup
@@ -231,27 +201,23 @@ network-monitoring-v2/
 │   ├── Dockerfile
 │   ├── config/logstash.yml
 │   └── pipeline/
-│       ├── endpoints.conf              Win/Linux Beats → OpenSearch
-│       ├── kafka-output.conf.optional  Optional Kafka stream output
-│       ├── netflow.conf                NetFlow/IPFIX/sFlow → OpenSearch
-│       ├── snmp-trap.conf              SNMP Traps → OpenSearch
-│       └── syslog.conf                 Syslog → OpenSearch
+│       ├── endpoints.conf             Win/Linux Beats → OpenSearch
+│       ├── netflow.conf               NetFlow/IPFIX/sFlow → OpenSearch
+│       ├── snmp-trap.conf             SNMP Traps → OpenSearch
+│       └── syslog.conf                Syslog → OpenSearch
 ├── grafana/
 │   └── provisioning/
 │       └── datasources/
 │           └── datasources.yml
-├── clickhouse/
-│   ├── config.xml                      ClickHouse server configuration
-│   └── netflow_schema.sql               NetFlow analytics tables (optional)
 ├── fluent-bit/
-│   ├── fluent-bit.conf                 Syslog → OpenSearch
-│   ├── fluent-bit.prod.conf            TLS verify enabled profile
+│   ├── fluent-bit.conf                Syslog → OpenSearch
+│   ├── fluent-bit.prod.conf           TLS verify enabled profile
 │   └── parsers.conf
 ├── prometheus/
-│   ├── alerts.yml                      Alert rules
-│   └── prometheus.yml                  Scrape config (add device IPs here)
+│   ├── alerts.yml                     Alert rules
+│   └── prometheus.yml                 Scrape config (add device IPs here)
 └── snmp-exporter/
-    └── snmp.yml                        SNMP OID definitions
+    └── snmp.yml                       SNMP OID definitions
 ```
 
 ---
