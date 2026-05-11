@@ -1,0 +1,21 @@
+services:
+  fluent-bit:
+    image: fluent/fluent-bit:3.3
+    container_name: fluent-bit
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "5140:5140/udp"
+      - "5141:5141/tcp"
+    volumes:
+      - ./fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf
+      - ./fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    environment:
+      OPENSEARCH_HOST: ${OPENSEARCH_HOST:-127.0.0.1}
+      OPENSEARCH_PORT: ${OPENSEARCH_PORT:-9200}
+      OPENSEARCH_USERNAME: ${OPENSEARCH_ADMIN_USERNAME}
+      OPENSEARCH_PASSWORD: ${OPENSEARCH_ADMIN_PASSWORD}

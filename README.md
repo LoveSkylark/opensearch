@@ -22,9 +22,9 @@ via the Prometheus Pushgateway only.
 │    ├─ NetFlow/IPFIX (UDP 2055) ──┐                          │
 │    ├─ sFlow        (UDP 6343) ───┤                          │
 │    ├─ SNMP Traps   (UDP 162)  ───┼─► Logstash ──────┬──► OpenSearch
-│    ├─ Syslog       (UDP 514)  ───┼─► Fluent Bit ────┤    (storage)
-│    │                             │                   │
-│    └─ Beats (TCP 5044) ──────────┘                   │
+│    ├─ Syslog       (UDP 514)  ───┤                  │    (storage)
+│    │                             │                  │
+│    └─ Beats (TCP 5044) ──────────┘                  │
 │                                                       │
 │  SNMP Poll         ──► SNMP Exporter ──► Prometheus  │
 │                                             │          │
@@ -51,7 +51,6 @@ via the Prometheus Pushgateway only.
 | Logstash        | SNMP Traps         | UDP 162→1062    | OpenSearch   |
 | Logstash        | Winlogbeat/Filebeat| TCP 5044        | OpenSearch   |
 | Logstash        | Syslog             | UDP/TCP 514→5140| OpenSearch   |
-| Fluent Bit      | Syslog             | UDP/TCP 514→5140| OpenSearch   |
 | SNMP Exporter   | SNMP polling       | UDP 161 out     | Prometheus   |
 | Pushgateway     | LibreNMS metrics   | TCP 9091 in     | Prometheus   |
 
@@ -77,7 +76,6 @@ via the Prometheus Pushgateway only.
 | Logstash (SNMP Traps)     | 1062               | UDP           | SNMP trap ingest               |
 | Logstash (Beats/Endpoint) | 5044               | TCP           | Winlogbeat/Filebeat ingest     |
 | Logstash (Syslog)         | 5140/5141          | UDP/TCP       | Syslog ingest (via NAT from 514)|
-| Fluent Bit (Syslog)       | 5140/5141          | UDP/TCP       | Alternative syslog path       |
 | SNMP Exporter             | 9116               | HTTP          | Prometheus SNMP metrics        |
 | Prometheus Pushgateway    | 9091               | HTTP          | Metrics push ingress (LibreNMS)|
 | Prometheus                | 9090               | HTTP          | Metrics storage & query engine |
@@ -107,6 +105,13 @@ For production profile:
 
 ```bash
 podman compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+Optional Fluent Bit syslog path:
+
+```bash
+podman compose -f docker-compose.yml -f docker-compose.fluent-bit.yml up -d
+podman compose -f docker-compose.yml -f docker-compose.fluent-bit.yml -f docker-compose.fluent-bit.prod.yml up -d
 ```
 
 The setup script now supports Linux and macOS hosts. Linux-only kernel and iptables
@@ -186,6 +191,8 @@ shared fields (`event.action`, `event.severity`) for easier cross-vendor search.
 ```text
 network-monitoring-v2/
 ├── .env.example
+├── docker-compose.fluent-bit.prod.yml
+├── docker-compose.fluent-bit.yml
 ├── docker-compose.prod.yml
 ├── docker-compose.yml
 ├── setup.sh
@@ -210,8 +217,8 @@ network-monitoring-v2/
 │       └── datasources/
 │           └── datasources.yml
 ├── fluent-bit/
-│   ├── fluent-bit.conf                Syslog → OpenSearch
-│   ├── fluent-bit.prod.conf           TLS verify enabled profile
+│   ├── fluent-bit.conf                Optional syslog → OpenSearch override
+│   ├── fluent-bit.prod.conf           Optional TLS verify enabled profile
 │   └── parsers.conf
 ├── prometheus/
 │   ├── alerts.yml                     Alert rules
@@ -228,6 +235,7 @@ network-monitoring-v2/
 - Do not commit `.env`.
 - Rotate at minimum: `OPENSEARCH_ADMIN_PASSWORD`, `SNMP_TRAP_COMMUNITY`
 - For production, use the override file and valid certificates: `docker-compose.prod.yml`
+- Fluent Bit is no longer part of the default deployment; enable it only with `docker-compose.fluent-bit.yml` if you want a separate lightweight syslog path.
 
 ## Retention and Alerts
 

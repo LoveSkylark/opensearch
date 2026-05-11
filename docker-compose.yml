@@ -10,14 +10,12 @@
 #    OpenSearch 2.14           Storage & search backend
 #    OpenSearch Dashboards     Web UI (SAML-ready)
 #    Logstash OSS              NetFlow/IPFIX/sFlow, syslog, SNMP traps
-#    Fluent Bit                Lightweight syslog collector
 #    SNMP Exporter             Direct SNMP polling → Prometheus
 #    Prometheus Pushgateway    Receives metrics from LibreNMS (external)
 #    Prometheus                Metrics store — scrapes Pushgateway + SNMP Exporter
 #
 #  Collector → Storage map:
 #    Logstash  (NetFlow, syslog, traps)  → OpenSearch
-#    Fluent Bit (syslog)                 → OpenSearch
 #    SNMP Exporter                       → Prometheus
 #    LibreNMS (external, via Pushgateway)→ Prometheus
 #
@@ -127,32 +125,6 @@ services:
       timeout: 10s
       retries: 10
       start_period: 45s
-
-  # -----------------------------------------------------------
-  # FLUENT BIT — Lightweight syslog collector (secondary path)
-  # Receives syslog on 5140/5141, forwards to OpenSearch
-  # Port 514 → 5140 via iptables NAT (see setup.sh)
-  # -----------------------------------------------------------
-  fluent-bit:
-    image: fluent/fluent-bit:3.3
-    container_name: fluent-bit
-    restart: unless-stopped
-    env_file:
-      - .env
-    ports:
-      - "5140:5140/udp"
-      - "5141:5141/tcp"
-    volumes:
-      - ./fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf
-      - ./fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf
-    depends_on:
-      opensearch:
-        condition: service_healthy
-    environment:
-      OPENSEARCH_HOST: ${OPENSEARCH_HOST:-127.0.0.1}
-      OPENSEARCH_PORT: ${OPENSEARCH_PORT:-9200}
-      OPENSEARCH_USERNAME: ${OPENSEARCH_ADMIN_USERNAME}
-      OPENSEARCH_PASSWORD: ${OPENSEARCH_ADMIN_PASSWORD}
 
   # -----------------------------------------------------------
   # SNMP EXPORTER — Active SNMP polling
