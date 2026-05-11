@@ -17,4 +17,11 @@ for prefix in netflow syslog snmp-traps; do
 
 done
 
+echo "Applying index templates..."
+for prefix in netflow syslog snmp-traps endpoint; do
+  curl -k -s -u "${AUTH}" -X PUT "${OS_URL}/_index_template/${prefix}-template" \
+    -H 'Content-Type: application/json' \
+    -d "{\"index_patterns\":[\"${prefix}-*\"],\"priority\":200,\"template\":{\"settings\":{\"number_of_shards\":1,\"number_of_replicas\":0,\"refresh_interval\":\"30s\",\"codec\":\"best_compression\"}}}" >/dev/null
+done
+
 echo "ISM bootstrap complete."
