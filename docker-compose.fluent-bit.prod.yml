@@ -1,5 +1,0 @@
-services:
-  fluent-bit:
-    volumes:
-      - ./fluent-bit/fluent-bit.prod.conf:/fluent-bit/etc/fluent-bit.conf
-      - ./fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf

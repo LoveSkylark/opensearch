@@ -1,40 +1,51 @@
-# Operations Runbook
+# Operations Runbook (Helm/Kubernetes)
 
-## Environments
-
-- Dev/default: `podman compose up -d --build`
-- Production: `podman compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`
-- Apply index retention manually: `podman compose run --rm opensearch-bootstrap`
-
-## Backups
-
-### OpenSearch snapshots (recommended)
-
-1. Register a snapshot repository (S3/NFS/shared FS) in OpenSearch.
-2. Trigger snapshots on schedule (daily suggested).
-3. Keep at least 7 to 30 restore points based on retention policy.
-
-Example API flow:
+## Deploy and upgrade
 
 ```bash
-curl -k -u "$OPENSEARCH_ADMIN_USERNAME:$OPENSEARCH_ADMIN_PASSWORD" \
-  -H 'Content-Type: application/json' \
-  -X PUT "https://127.0.0.1:9200/_snapshot/main_repo" \
-  -d '{"type":"fs","settings":{"location":"/usr/share/opensearch/snapshots","compress":true}}'
-
-curl -k -u "$OPENSEARCH_ADMIN_USERNAME:$OPENSEARCH_ADMIN_PASSWORD" \
-  -X PUT "https://127.0.0.1:9200/_snapshot/main_repo/nightly-$(date +%F)?wait_for_completion=true"
+helm dependency build ./opensearch-helm
+helm upgrade --install opensearch-stack ./opensearch-helm -n netmon --create-namespace
 ```
 
-### Prometheus backups
+## Validate chart
 
-- Stop Prometheus and back up the data volume (`prometheus-data`) at the storage layer.
-- Keep `prometheus/prometheus.yml` and `prometheus/alerts.yml` in version control.
+```bash
+helm lint ./opensearch-helm
+helm template test-release ./opensearch-helm > /tmp/opensearch-helm-render.yaml
+```
 
-## Restore Testing
+## Rollout status
 
-- Run quarterly restore tests in a staging environment.
-- Validate:
-  - NetFlow, syslog, and trap index visibility.
-  - Prometheus query results for critical devices.
-  - Dashboards loading with historical data.
+```bash
+kubectl get pods -n netmon
+kubectl rollout status statefulset/opensearch -n netmon
+kubectl rollout status deployment/opensearch-dashboards -n netmon
+kubectl rollout status deployment/logstash -n netmon
+kubectl rollout status deployment/prometheus -n netmon
+kubectl rollout status deployment/snmp-exporter -n netmon
+kubectl rollout status deployment/pushgateway -n netmon
+kubectl rollout status deployment/grafana -n netmon
+```
+
+## Useful checks
+
+```bash
+kubectl logs -n netmon deploy/logstash --tail=200
+kubectl logs -n netmon statefulset/opensearch --tail=200
+kubectl get job -n netmon opensearch-bootstrap
+kubectl logs -n netmon job/opensearch-bootstrap --tail=200
+```
+
+## Backup guidance
+
+- OpenSearch: use snapshot repository and scheduled snapshots.
+- Prometheus: back up the volume used by `prometheus-data` PVC.
+- Grafana: back up the volume used by `grafana-data` PVC.
+
+## Restore testing
+
+Run periodic restores in staging and verify:
+
+- OpenSearch indices are readable
+- Prometheus targets and historical queries work
+- Dashboards and datasources load correctly
