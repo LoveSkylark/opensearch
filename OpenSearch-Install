@@ -1,0 +1,248 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+K3S_INSTALL_SCRIPT="https://get.k3s.io"
+K9S_INSTALL_SCRIPT="https://webi.sh/k9s"
+HELM_INSTALL_SCRIPT="https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3"
+DOCKER_INSTALL_SCRIPT="https://get.docker.com"
+
+BIN_DIR="${BIN_DIR:-/usr/local/bin}"
+OPS_DIR="${OPS_DIR:-/data}"
+STACK_REPO_URL="${STACK_REPO_URL:-https://github.com/YOUR-ORG/YOUR-REPO.git}"
+STACK_REPO_DIR="${STACK_REPO_DIR:-$OPS_DIR/vault/opensearch-stack}"
+VALUES_FILE="${VALUES_FILE:-$OPS_DIR/opensearch-values.yaml}"
+NAMESPACE="${NAMESPACE:-netmon}"
+RELEASE_NAME="${RELEASE_NAME:-opensearch-stack}"
+LOGSTASH_IMAGE="${LOGSTASH_IMAGE:-your-registry/logstash-netflow:8.6.1}"
+LOGSTASH_CONTEXT_DIR="${LOGSTASH_CONTEXT_DIR:-$STACK_REPO_DIR/opensearch/logstash}"
+CHART_DIR="${CHART_DIR:-$STACK_REPO_DIR/opensearch-helm}"
+STORAGE_PATH="${STORAGE_PATH:-/opt/kubes/storage}"
+OPENSEARCH_ADMIN_PASSWORD="${OPENSEARCH_ADMIN_PASSWORD:-ChangeMeNow!}"
+GRAFANA_ADMIN_PASSWORD="${GRAFANA_ADMIN_PASSWORD:-ChangeMeGrafana!}"
+OPENSEARCH_VOLUME_SIZE="${OPENSEARCH_VOLUME_SIZE:-50Gi}"
+PROMETHEUS_VOLUME_SIZE="${PROMETHEUS_VOLUME_SIZE:-20Gi}"
+GRAFANA_VOLUME_SIZE="${GRAFANA_VOLUME_SIZE:-5Gi}"
+DASHBOARDS_HOST="${DASHBOARDS_HOST:-dashboards.test.local}"
+GRAFANA_HOST="${GRAFANA_HOST:-grafana.test.local}"
+PROMETHEUS_HOST="${PROMETHEUS_HOST:-prometheus.test.local}"
+PUSHGATEWAY_HOST="${PUSHGATEWAY_HOST:-pushgateway.test.local}"
+
+replace_in_file() {
+    local old_value="$1"
+    local new_value="$2"
+    local file_path="$3"
+  local escaped_old_value
+  local escaped_new_value
+
+  escaped_old_value=$(printf '%s' "$old_value" | sed 's/[|&]/\\&/g')
+  escaped_new_value=$(printf '%s' "$new_value" | sed 's/[|&]/\\&/g')
+
+    if grep -qF "$old_value" "$file_path"; then
+    sudo sed -i "s|$escaped_old_value|$escaped_new_value|g" "$file_path"
+    fi
+}
+
+ensure_repo() {
+    local repo_url="$1"
+    local repo_dir="$2"
+
+    if [ ! -d "$repo_dir/.git" ]; then
+        sudo mkdir -p "$(dirname "$repo_dir")"
+        sudo git clone "$repo_url" "$repo_dir"
+        return
+    fi
+
+    sudo git -C "$repo_dir" pull --ff-only
+}
+
+echo "################## Validating required placeholders ##################"
+echo ""
+if [[ "$STACK_REPO_URL" == "https://github.com/YOUR-ORG/YOUR-REPO.git" ]]; then
+    echo "Update STACK_REPO_URL before running this installer."
+    echo ""
+    echo "Example: STACK_REPO_URL=https://github.com/your-org/your-monorepo.git sudo bash OpenSearch-Install"
+    exit 1
+fi
+
+if [[ "$LOGSTASH_IMAGE" == "your-registry/logstash-netflow:8.6.1" ]]; then
+    echo "Update LOGSTASH_IMAGE before running this installer."
+    echo ""
+    echo "Example: LOGSTASH_IMAGE=registry.example.com/logstash-netflow:8.6.1 sudo bash OpenSearch-Install"
+    exit 1
+fi
+
+echo "################## Updating Linux ##################"
+echo ""
+sudo apt-get update
+sudo NEEDRESTART_MODE=a apt-get upgrade --yes
+
+echo ""
+echo "################## Installing essential tools ##################"
+echo ""
+sudo NEEDRESTART_MODE=a apt-get install -y curl git vim jq ca-certificates apt-transport-https gnupg lsb-release
+
+echo ""
+echo "################## Downloading and installing K3S ##################"
+echo ""
+echo "This step installs K3s, a lightweight Kubernetes distribution."
+echo ""
+grep -qxF 'KUBECONFIG="/etc/rancher/k3s/k3s.yaml"' /etc/environment || echo 'KUBECONFIG="/etc/rancher/k3s/k3s.yaml"' | sudo tee -a /etc/environment >/dev/null
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+export INSTALL_K3S_BIN_DIR="$BIN_DIR"
+if ! command -v kubectl >/dev/null 2>&1; then
+    curl -fsSL "$K3S_INSTALL_SCRIPT" | sudo sh -
+fi
+echo ""
+
+echo "################## Downloading and installing K9S ##################"
+echo ""
+echo "This step installs K9s, a terminal-based Kubernetes dashboard."
+echo ""
+if ! command -v k9s >/dev/null 2>&1; then
+    curl -fsSL "$K9S_INSTALL_SCRIPT" | sudo sh -
+    K9S_PATH=$(readlink -f /usr/local/bin/k9s)
+    sudo mv "$K9S_PATH" "/usr/local/bin/k9s"
+    sudo chmod +x /usr/local/bin/k9s
+fi
+
+echo "################## Downloading and installing Helm ##################"
+echo ""
+echo "This step installs Helm, the Kubernetes package manager."
+echo ""
+if ! command -v helm >/dev/null 2>&1; then
+    curl -fsSL "$HELM_INSTALL_SCRIPT" | sudo bash
+fi
+echo ""
+
+echo "################## Downloading and installing Docker ##################"
+echo ""
+echo "This step installs Docker so the custom Logstash image can be built and pushed."
+echo ""
+if ! command -v docker >/dev/null 2>&1; then
+    curl -fsSL "$DOCKER_INSTALL_SCRIPT" | sudo sh
+fi
+sudo systemctl enable docker
+sudo systemctl start docker
+if [ -n "${SUDO_USER:-}" ]; then
+    sudo usermod -aG docker "$SUDO_USER" || true
+fi
+echo ""
+
+echo "################## Fetching OpenSearch source ##################"
+echo ""
+echo "This step fetches the chart and Logstash build context from the repository."
+echo ""
+sudo mkdir -p "$OPS_DIR/vault"
+ensure_repo "$STACK_REPO_URL" "$STACK_REPO_DIR"
+
+echo "################## Preparing OpenSearch values ##################"
+echo ""
+if [ ! -f "$VALUES_FILE" ]; then
+    sudo cp "$CHART_DIR/values.yaml" "$VALUES_FILE"
+fi
+
+replace_in_file '  opensearchAdminPassword: "ChangeMeNow!"' '  opensearchAdminPassword: "'"$OPENSEARCH_ADMIN_PASSWORD"'"' "$VALUES_FILE"
+replace_in_file '    adminPassword: "ChangeMeNow!"' '    adminPassword: "'"$OPENSEARCH_ADMIN_PASSWORD"'"' "$VALUES_FILE"
+replace_in_file '  image: "your-registry/logstash-netflow:8.6.1"' '  image: "'"$LOGSTASH_IMAGE"'"' "$VALUES_FILE"
+replace_in_file '    adminPassword: "ChangeMeGrafana!"' '    adminPassword: "'"$GRAFANA_ADMIN_PASSWORD"'"' "$VALUES_FILE"
+replace_in_file '    dashboards: "dashboards.test.local"' '    dashboards: "'"$DASHBOARDS_HOST"'"' "$VALUES_FILE"
+replace_in_file '    grafana: "grafana.test.local"' '    grafana: "'"$GRAFANA_HOST"'"' "$VALUES_FILE"
+replace_in_file '    prometheus: "prometheus.test.local"' '    prometheus: "'"$PROMETHEUS_HOST"'"' "$VALUES_FILE"
+replace_in_file '    pushgateway: "pushgateway.test.local"' '    pushgateway: "'"$PUSHGATEWAY_HOST"'"' "$VALUES_FILE"
+replace_in_file '    volumeSize: "50Gi"' '    volumeSize: "'"$OPENSEARCH_VOLUME_SIZE"'"' "$VALUES_FILE"
+replace_in_file '    volumeSize: "20Gi"' '    volumeSize: "'"$PROMETHEUS_VOLUME_SIZE"'"' "$VALUES_FILE"
+replace_in_file '    volumeSize: "5Gi"' '    volumeSize: "'"$GRAFANA_VOLUME_SIZE"'"' "$VALUES_FILE"
+replace_in_file '  path: "/opt/kubes/storage/"' '  path: "'"$STORAGE_PATH"'/"' "$VALUES_FILE"
+
+echo "################## Creating PersistentVolumes ##################"
+echo ""
+echo "This step creates the static hostPath volumes required by the chart."
+echo ""
+sudo mkdir -p "$STORAGE_PATH/$RELEASE_NAME/opensearch"
+sudo mkdir -p "$STORAGE_PATH/$RELEASE_NAME/prometheus"
+sudo mkdir -p "$STORAGE_PATH/$RELEASE_NAME/grafana"
+sudo chmod 0777 "$STORAGE_PATH/$RELEASE_NAME/opensearch" "$STORAGE_PATH/$RELEASE_NAME/prometheus" "$STORAGE_PATH/$RELEASE_NAME/grafana"
+
+sudo env KUBECONFIG="$KUBECONFIG" kubectl apply -f - <<EOF
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ${RELEASE_NAME}-opensearch-data
+spec:
+  capacity:
+    storage: ${OPENSEARCH_VOLUME_SIZE}
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath:
+    path: ${STORAGE_PATH}/${RELEASE_NAME}/opensearch
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ${RELEASE_NAME}-prometheus-data
+spec:
+  capacity:
+    storage: ${PROMETHEUS_VOLUME_SIZE}
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath:
+    path: ${STORAGE_PATH}/${RELEASE_NAME}/prometheus
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ${RELEASE_NAME}-grafana-data
+spec:
+  capacity:
+    storage: ${GRAFANA_VOLUME_SIZE}
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath:
+    path: ${STORAGE_PATH}/${RELEASE_NAME}/grafana
+EOF
+echo ""
+
+echo "################## Building custom Logstash image ##################"
+echo ""
+echo "This step builds and pushes the Logstash image required by the Helm chart."
+echo ""
+if [ ! -d "$LOGSTASH_CONTEXT_DIR" ]; then
+    echo "Logstash build context not found: $LOGSTASH_CONTEXT_DIR"
+    exit 1
+fi
+sudo docker build -t "$LOGSTASH_IMAGE" "$LOGSTASH_CONTEXT_DIR"
+sudo docker push "$LOGSTASH_IMAGE"
+echo ""
+
+echo "################## Deploying OpenSearch Helm chart ##################"
+echo ""
+echo "This step builds chart dependencies and deploys the full stack."
+echo ""
+if [ ! -d "$CHART_DIR" ]; then
+    echo "Chart directory not found: $CHART_DIR"
+    exit 1
+fi
+
+helm dependency build "$CHART_DIR"
+helm upgrade --install "$RELEASE_NAME" "$CHART_DIR" -n "$NAMESPACE" --create-namespace -f "$VALUES_FILE"
+echo ""
+
+echo "################## Installation Complete ##################"
+echo ""
+echo "OpenSearch stack is installed and configured successfully."
+echo ""
+echo "Values file: $VALUES_FILE"
+echo "Namespace:   $NAMESPACE"
+echo "Release:     $RELEASE_NAME"
+echo ""
+echo "Next checks:"
+echo "  kubectl get pods -n $NAMESPACE"
+echo "  kubectl get pvc -n $NAMESPACE"
+echo "  helm list -n $NAMESPACE"
